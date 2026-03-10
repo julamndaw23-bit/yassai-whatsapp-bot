@@ -1,0 +1,65 @@
+import express from 'express';
+import { URLSearchParams } from 'url';
+import https from 'https';
+
+const app = express();
+app.use(express.urlencoded({ extended: true }));
+app.use(express.json());
+
+const PORT = process.env.PORT || 3000;
+const TWILIO_ACCOUNT_SID = process.env.TWILIO_ACCOUNT_SID;
+const TWILIO_AUTH_TOKEN = process.env.TWILIO_AUTH_TOKEN;
+const FROM_NUMBER = 'whatsapp:+15013832419';
+
+function sendWhatsApp(to, message) {
+  return new Promise((resolve, reject) => {
+    const formData = new URLSearchParams({ From: FROM_NUMBER, To: to, Body: message });
+    const auth = Buffer.from(`${TWILIO_ACCOUNT_SID}:${TWILIO_AUTH_TOKEN}`).toString('base64');
+    const options = {
+      hostname: '[api.twilio.com](https://api.twilio.com)',
+      path: `/2010-04-01/Accounts/${TWILIO_ACCOUNT_SID}/Messages.json`,
+      method: 'POST',
+      headers: { 'Authorization': `Basic ${auth}`, 'Content-Type': 'application/x-www-form-urlencoded' }
+    };
+    const req = https.request(options, (res) => {
+      let data = '';
+      res.on('data', chunk => data += chunk);
+      res.on('end', () => resolve(JSON.parse(data)));
+    });
+    req.on('error', reject);
+    req.write(formData.toString());
+    req.end();
+  });
+}
+
+function getResponse(messageText, name) {
+  const msg = messageText.toLowerCase();
+  if (msg.includes("hola") || msg.includes("buenos") || msg.includes("buenas") || msg.includes("hi") || msg.includes("hello")) {
+    return `¡Hola ${name}! 👋 Gracias por contactar con [Yass.ai](https://Yass.ai).\n\nSomos la plataforma número 1 de automatización con IA para restaurantes en España 🇪🇸\n\nNuestros clientes consiguen en menos de 30 días:\n📈 +50% más reservas\n🤖 Atención automática 24/7\n🌐 Web profesional con reservas online\n\n¿Me puedes decir el nombre de tu restaurante? 🍽️`;
+  }
+  if (msg.includes("precio") || msg.includes("coste") || msg.includes("cuanto") || msg.includes("plan")) {
+    return `Entiendo ${name}, el precio es importante 💰\n\nNo tenemos precio fijo porque cada restaurante es diferente. Nuestros clientes recuperan la inversión en el primer mes.\n\nEn el diagnóstico gratuito te hacemos una propuesta exacta sin compromiso.\n\n¿Cuándo tienes 15 minutos esta semana? ☎️`;
+  }
+  if (msg.includes("reserva") || msg.includes("agendar") || msg.includes("diagnostico") || msg.includes("me interesa")) {
+    return `¡Perfecto ${name}! El diagnóstico es 100% gratuito y sin compromiso 🎉\n\nEn 15 minutos analizamos tu restaurante.\n\nSolo necesito:\n📋 Nombre de tu restaurante\n📅 ¿Qué día te va mejor?\n🕐 ¿Mañana o tarde?\n\nDime y te confirmo en menos de 5 minutos ✅`;
+  }
+  return `¡Hola ${name}! 👋 Gracias por escribirnos.\n\nEn [Yass.ai](https://Yass.ai) ayudamos a restaurantes a automatizar su negocio con IA:\n\n🌐 Web profesional con reservas online\n🤖 Agente IA que atiende 24/7\n📈 +50% más reservas de media\n\nEl primer paso es un diagnóstico gratuito de 15 minutos.\n\n¿Cuándo tienes un hueco esta semana? 📅`;
+}
+
+app.post('/webhook', async (req, res) => {
+  const { From, Body, ProfileName } = req.body;
+  console.log(`Message from ${From}: ${Body}`);
+  if (!From || !Body) return res.status(400).send('Missing fields');
+  const name = ProfileName ? ProfileName.split(' ')[0] : '';
+  const response = getResponse(Body, name);
+  try {
+    const to = From.startsWith('whatsapp:') ? From : `whatsapp:${From}`;
+    await sendWhatsApp(to, response);
+  } catch (err) {
+    console.error('Error:', err);
+  }
+  res.status(200).send('OK');
+});
+
+app.get('/', (req, res) => res.send('YassAI Bot running! 🤖'));
+app.listen(PORT, () => console.log(`Server on port ${PORT}`));
